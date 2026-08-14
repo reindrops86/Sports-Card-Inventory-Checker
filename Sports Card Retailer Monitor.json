@@ -1,0 +1,228 @@
+{
+  "name": "Sports Card Retailer Monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "0e5473ae-041f-467e-9bf3-ef9982a5b2fb",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Best Buy products to monitor. Replace the SKU numbers with the\n// products you want to track (find the SKU on the Best Buy product page).\nreturn [\n  { json: { sku: '6678426', targetPrice: 84.99 } },\n  { json: { sku: '6678429', targetPrice: 44.99 } },\n];"
+      },
+      "id": "8115e3f6-fe1d-4f34-90b3-c7ccc4e0b255",
+      "name": "Target Products",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.bestbuy.com/v1/products/{{ $json.sku }}.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "show",
+              "value": "sku,name,salePrice,regularPrice,onlineAvailability,url"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "b11dae39-ddba-4218-a47e-d6519b5e7cb8",
+      "name": "Best Buy Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        0
+      ],
+      "credentials": {
+        "httpQueryAuth": {
+          "id": "T9yKfXXpwSL53f8N",
+          "name": "Query Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $json;\nconst target = Number($('Target Products').item.json.targetPrice);\nconst price = p.salePrice != null ? Number(p.salePrice) : null;\nconst inStock = p.onlineAvailability === true;\nconst meetsPrice = price != null && price <= target;\n\nreturn [{\n  json: {\n    sku: p.sku,\n    name: p.name || 'Unknown product',\n    url: p.url || '',\n    price,\n    regularPrice: p.regularPrice != null ? Number(p.regularPrice) : null,\n    targetPrice: target,\n    inStock,\n    meetsPrice,\n    alert: inStock && meetsPrice,\n    checkedAt: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "cc4f5da3-48e2-4c07-9734-9319d781e52c",
+      "name": "Parse Product Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-alert",
+              "leftValue": "={{ $json.alert }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "abdae4de-7982-4da9-bb3b-a5bb58d4b892",
+      "name": "In Stock & At Target Price",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1537633748437438519"
+        },
+        "channelId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1537633749771231264"
+        },
+        "content": "=🎯 **In stock at target price!**\n**{{ $json.name }}**\nPrice: ${{ $json.price }} (target ${{ $json.targetPrice }})\n{{ $json.url }}",
+        "options": {}
+      },
+      "id": "da9145d1-e605-47fe-983d-ceb01958cea8",
+      "name": "Discord Alert",
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        0
+      ],
+      "webhookId": "2c980d79-b7e7-4a6b-ba65-4189269c63db",
+      "credentials": {
+        "discordBotApi": {
+          "id": "I3i5iu7WEVnTiaJb",
+          "name": "Discord Bot account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Target Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Target Products": {
+      "main": [
+        [
+          {
+            "node": "Best Buy Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Buy Lookup": {
+      "main": [
+        [
+          {
+            "node": "Parse Product Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Product Info": {
+      "main": [
+        [
+          {
+            "node": "In Stock & At Target Price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "In Stock & At Target Price": {
+      "main": [
+        [
+          {
+            "node": "Discord Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8f009ab5-bac3-40bf-9741-c0cf44b870e2",
+  "meta": {
+    "instanceId": "98b98df94014e4371691edca857bddb57409a1f12028a0547ac8bb639b67c0cb"
+  },
+  "nodeGroups": [],
+  "id": "YFIjuWD57YVd2xQ6",
+  "tags": []
+}
